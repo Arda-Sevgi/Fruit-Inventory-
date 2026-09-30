@@ -1,93 +1,48 @@
-# Fruit & Vegetable Inventory Management System
+# Fruit and Vegetable Inventory
 
-A simple Python-based inventory management system for tracking fruit and vegetable stock. The program uses a CSV file to store inventory data and provides a menu-driven interface for adding, removing, and checking stock levels.
+A small Python command-line application for managing stock with CSV persistence. I built the original project to practise functions, dictionaries, file handling and input validation. The current version extends it with explicit CSV validation, safer saving and automated regression tests.
 
-## 📌 Features
+**Public source code:** this repository contains the runnable application and its tests. It is a programming project, not a production inventory service.
 
-- Add stock items
-- Remove stock items
-- Check the current stock of an item
-- Automatically identify low-stock items
-- Store inventory data in a CSV file
-- Validate user input
-- Prevent removing more stock than is currently available
-- Automatically initialise the inventory file when the program is first run
+## Run
 
-## 🛠️ Technologies Used
+Requires Python 3.10 or later. No third-party packages are needed.
 
-- **Python 3**
-- **CSV** – Used for storing and updating inventory data
-- **OS module** – Used to check whether the inventory file exists
-
-## 📂 Inventory
-
-The system starts with three inventory items:
-
-- Apples
-- Bananas
-- Carrots
-
-A low-stock warning is displayed when an item's stock falls below **10 units**.
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-Make sure Python 3 is installed on your computer.
-
-### Clone the Repository
-
-```bash
+```sh
 git clone https://github.com/Arda-Sevgi/Fruit-Inventory-.git
-```
-
-Navigate to the project directory:
-
-```bash
 cd Fruit-Inventory-
+python Fruit.py
 ```
 
-### Run the Program
+On systems where Python is named `python3`, use that command instead.
 
-```bash
-python main.py
+By default, the application reads `inventory.csv` beside `Fruit.py`. It creates a missing file with Apples, Bananas and Carrots at zero stock. It preserves an existing inventory. To try a separate file without changing the sample:
+
+```sh
+python Fruit.py --file demo_inventory.csv
 ```
 
-> Replace `main.py` with the actual Python filename if the file has a different name.
+## Features
 
-## 💻 Main Menu
+- Add and remove positive whole-number quantities.
+- Reject unknown items, invalid quantities and removal beyond available stock.
+- Check stock and list items below the 10-unit threshold.
+- Load selectable items from the CSV rather than a separate hard-coded menu list.
+- Validate headers, duplicate names, missing fields and negative or non-integer stock.
+- Write to a temporary file and replace the CSV only after a complete write.
+- Report file errors without resetting the existing inventory.
 
-When the program starts, users can choose from the following options:
+## Example
+
+With a new demo inventory, select **1**, choose **1 (Apples)** and add **15** units. Then select **2**, choose Apples and remove **3**. The application saves **12** Apples. Restart it with the same `--file` path and select **3** to check that the quantity persisted.
 
 ```text
-1. Add Stock Items
-2. Remove Stock Items
-3. Check Stock
-4. Low Stock Warning
-5. Exit
+Stock saved. Apples: 15 units
+Stock saved. Apples: 12 units
+Current stock for Apples: 12 units
 ```
 
-### Add Stock
-
-Select an item and enter the quantity you want to add. The inventory is updated and saved to the CSV file.
-
-### Remove Stock
-
-Select an item and enter the quantity to remove. The system checks that enough stock is available before making the change.
-
-### Check Stock
-
-Displays the current quantity of a selected item.
-
-### Low Stock Warning
-
-Checks all inventory items and displays items with fewer than 10 units remaining.
-
-## 💾 Data Storage
-
-Inventory data is stored in `inventory.csv`.
-
-The program automatically creates the file if it does not already exist and initialises it with the default inventory:
+## Data format
 
 ```csv
 Item,Stock
@@ -96,26 +51,22 @@ Bananas,0
 Carrots,0
 ```
 
-Changes made through the program are written back to the CSV file, allowing inventory data to persist between program runs.
+Each item name must be non-empty, unique and have no surrounding whitespace. Stock must be a non-negative integer. Back up a file before editing it manually; malformed data is rejected rather than repaired automatically.
 
-## 🎯 Learning Objectives
+## Tests
 
-This project was created to practise Python programming fundamentals and basic data management.
+```sh
+python -m unittest discover -v
+```
 
-Through this project, I practised:
+The 12 tests use temporary files. They cover persistence, invalid transactions, threshold boundaries, corrupt CSV input, failed saves, Unicode names and the command-line workflow, including execution from another directory. They do not modify the repository's sample inventory.
 
-- Functions and modular programming
-- File handling
-- Reading and writing CSV files
-- Dictionaries
-- Loops and conditional statements
-- Exception handling
-- User input validation
-- Basic inventory management logic
-- Persistent data storage
+## Design and limitations
 
-## 👤 Author
+The stock rules are separate from the interactive menu so they can be tested without simulated terminal sessions. CSV keeps the example simple and inspectable. Replacement-based saving protects against incomplete writes, but there is no locking for concurrent users, database, authentication, audit history or guarantee against every storage failure. This application is intended for one local user.
 
-**Arda Sevgi**
+## Author
 
-GitHub: [Arda-Sevgi](https://github.com/Arda-Sevgi)
+Arda Sevgi — BSc Computing student at Nottingham Trent University.
+
+[Portfolio](https://arda-sevgi.github.io/Portfolio/) · [LinkedIn](https://www.linkedin.com/in/arda-sevgi-561299389/)

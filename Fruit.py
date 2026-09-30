@@ -1,145 +1,149 @@
+"""Small CSV-backed inventory application. No third-party dependencies."""
+
+import argparse
 import csv
 import os
+from pathlib import Path
+import tempfile
 
-FILENAME = "inventory.csv"
+FILENAME = Path(__file__).resolve().with_name("inventory.csv")
 LOW_STOCK_THRESHOLD = 10
+DEFAULT_INVENTORY = {"Apples": 0, "Bananas": 0, "Carrots": 0}
 
-print(" Welcome to the Fruit & Vegetable Inventory Management System!")
 
-# === Main Menu ===
-menu_text = """
-=== Main Menu ===
-1. Add Stock Items
-2. Remove Stock Items
-3. Check Stock
-4. Low Stock Warning
-5. Exit
-"""
+def validate_inventory(inventory):
+    if not inventory:
+        raise ValueError("Inventory must contain at least one item.")
+    for item, stock in inventory.items():
+        if not isinstance(item, str) or not item.strip() or item != item.strip():
+            raise ValueError("Item names must be non-empty and trimmed.")
+        if type(stock) is not int or stock < 0:
+            raise ValueError(f"Invalid stock for {item}: use a non-negative integer.")
 
-def initialize_inventory():
-    if not os.path.exists(FILENAME):
-        with open(FILENAME, mode='w', newline='') as file:
+
+def write_inventory(inventory, filename=FILENAME):
+    """Replace the CSV only after a complete write; preserve it on failure."""
+    validate_inventory(inventory)
+    path = Path(filename)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", newline="", encoding="utf-8",
+                                         dir=path.parent, delete=False) as file:
+            temporary = Path(file.name)
             writer = csv.writer(file)
-            writer.writerow(['Item', 'Stock'])
-            writer.writerow(['Apples', 0])
-            writer.writerow(['Bananas', 0])
-            writer.writerow(['Carrots', 0])
+            writer.writerow(["Item", "Stock"])
+            writer.writerows(inventory.items())
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
-def read_inventory():
+def initialize_inventory(filename=FILENAME):
+    if not Path(filename).exists():
+        write_inventory(DEFAULT_INVENTORY, filename)
+
+
+def read_inventory(filename=FILENAME):
+    """Reject malformed data instead of silently resetting existing stock."""
     inventory = {}
-    with open(FILENAME, mode='r') as file:
-        reader = csv.DictReader(file)
+    with open(filename, newline="", encoding="utf-8-sig") as file:
+        reader = csv.DictReader(file, strict=True)
+        if reader.fieldnames != ["Item", "Stock"]:
+            raise ValueError("CSV header must be Item,Stock.")
         for row in reader:
-            inventory[row['Item']] = int(row['Stock'])
+            item, stock = row.get("Item"), row.get("Stock")
+            if None in row or item is None or stock is None:
+                raise ValueError(f"Malformed CSV row at line {reader.line_num}.")
+            if item in inventory:
+                raise ValueError(f"Duplicate item: {item}.")
+            try:
+                inventory[item] = int(stock)
+            except ValueError as error:
+                raise ValueError(f"Invalid stock at line {reader.line_num}.") from error
+    validate_inventory(inventory)
     return inventory
 
 
-def write_inventory(inventory):
-    with open(FILENAME, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['Item', 'Stock'])
-        for item, stock in inventory.items():
-            writer.writerow([item, stock])
+def change_stock(inventory, item, quantity, *, remove=False):
+    """Validate a transaction before mutating the in-memory inventory."""
+    if item not in inventory:
+        raise ValueError("Unknown inventory item.")
+    if type(quantity) is not int or quantity <= 0:
+        raise ValueError("Quantity must be a positive whole number.")
+    if remove and quantity > inventory[item]:
+        raise ValueError(f"Not enough stock. Current stock for {item}: {inventory[item]}")
+    inventory[item] += -quantity if remove else quantity
 
 
-def choose_item():
-    items = ['Apples', 'Bananas', 'Carrots']
+def low_stock_items(inventory, threshold=LOW_STOCK_THRESHOLD):
+    return {item: stock for item, stock in inventory.items() if stock < threshold}
+
+
+def choose_item(inventory):
+    items = list(inventory)
     print("\nSelect an item:")
-    for i, item in enumerate(items, 1):
-        print(f"{i}. {item}")
+    for number, item in enumerate(items, 1):
+        print(f"{number}. {item}")
     try:
-        choice = int(input("Enter your choice (1-3): "))
-        if 1 <= choice <= 3:
+        choice = int(input(f"Enter your choice (1-{len(items)}): "))
+        if 1 <= choice <= len(items):
             return items[choice - 1]
-        else:
-            print("Invalid selection.")
-            return None
     except ValueError:
-        print("Invalid input. Please enter a number.")
-        return None
+        pass
+    print("Invalid selection. Enter an item number from the list.")
+    return None
 
-# 1. Add Stock Items
-def add_stock(inventory):
-    item = choose_item()
-    if item:
-        try:
-            qty = int(input(f"Enter quantity to add for {item}: "))
-            if qty > 0:
-                inventory[item] += qty
-                print(f"{qty} units of {item} added successfully.")
-            else:
-                print("Quantity must be positive.")
-        except ValueError:
-            print("Invalid input. Please enter a number.")
 
-# 2. Remove Stock Items
-def remove_stock(inventory):
-    item = choose_item()
-    if item:
-        try:
-            qty = int(input(f"Enter quantity to remove for {item}: "))
-            if qty > 0:
-                if qty <= inventory[item]:
-                    inventory[item] -= qty
-                    print(f"{qty} units of {item} removed successfully.")
-                else:
-                    print(f"Not enough stock. Current stock for {item}: {inventory[item]}")
-            else:
-                print("Quantity must be positive.")
-        except ValueError:
-            print("Invalid input. Please enter a number.")
-
-# 3. Check Stock
-def check_stock(inventory):
-    item = choose_item()
-    if item:
-        print(f"Current stock for {item}: {inventory[item]} units")
-
-# 4. Low Stock Warning
-def low_stock_warning(inventory):
-    print("\n Low Stock Items (below threshold of 10 units):")
-    low_items = {item: qty for item, qty in inventory.items() if qty < LOW_STOCK_THRESHOLD}
-    if low_items:
-        for item, qty in low_items.items():
-            print(f"- {item}: {qty} units")
-    else:
-        print(" All items have sufficient stock.")
-
-# 5. Exit
-def exit_program():
-    print(" Exiting program. Goodbye!")
-
-# Main Program Loop
-def main():
-    initialize_inventory()
-    while True:
-        inventory = read_inventory()
-        print(menu_text)
-        try:
-            choice = int(input("Select an option (1-5): "))
-            if choice == 1:
-                add_stock(inventory)
-            elif choice == 2:
-                remove_stock(inventory)
-            elif choice == 3:
-                check_stock(inventory)
-            elif choice == 4:
-                low_stock_warning(inventory)
-            elif choice == 5:
-                exit_program()
-                break
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--file", type=Path, default=FILENAME,
+                        help="CSV path (default: inventory.csv beside this script)")
+    args = parser.parse_args(argv)
+    print("Welcome to the Fruit & Vegetable Inventory Management System!")
+    try:
+        initialize_inventory(args.file)
+        while True:
+            inventory = read_inventory(args.file)
+            print("\n1. Add Stock Items\n2. Remove Stock Items\n3. Check Stock"
+                  "\n4. Low Stock Warning\n5. Exit")
+            choice = input("Select an option (1-5): ").strip()
+            if choice == "5":
+                print("Exiting program. Goodbye!")
+                return 0
+            if choice in ("1", "2", "3"):
+                item = choose_item(inventory)
+                if item is None:
+                    continue
+                if choice == "3":
+                    print(f"Current stock for {item}: {inventory[item]} units")
+                    continue
+                try:
+                    quantity = int(input("Enter quantity: "))
+                    change_stock(inventory, item, quantity, remove=choice == "2")
+                except ValueError as error:
+                    print(f"Invalid transaction: {error}")
+                    continue
+                write_inventory(inventory, args.file)
+                print(f"Stock saved. {item}: {inventory[item]} units")
+            elif choice == "4":
+                low = low_stock_items(inventory)
+                print(f"Low stock items (below {LOW_STOCK_THRESHOLD} units):")
+                for item, stock in low.items():
+                    print(f"- {item}: {stock} units")
+                if not low:
+                    print("All items have sufficient stock.")
             else:
                 print("Invalid choice. Please select between 1 and 5.")
-            write_inventory(inventory)
+    except (OSError, ValueError, csv.Error) as error:
+        print(f"Inventory error: {error}\nCheck the CSV and file permissions. Existing data was not reset.")
+        return 1
+    except (EOFError, KeyboardInterrupt):
+        print("\nExiting program.")
+        return 0
 
-            again = input("\nWould you like to perform another task? (yes/no): ").strip().lower()
-            if again != "yes":
-                exit_program()
-                break
-
-        except ValueError:
-            print("Invalid input. Please enter a number.")
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
